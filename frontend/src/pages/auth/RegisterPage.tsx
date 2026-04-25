@@ -16,6 +16,9 @@ const registerSchema = z.object({
     message: 'Password must include uppercase, lowercase, number, and special character',
   }),
   confirmPassword: z.string().min(1, 'Please confirm your password'),
+  acceptLegal: z.boolean().refine((value) => value === true, {
+    message: 'You must agree to the Terms, Privacy Policy, and Cookie Policy',
+  }),
 }).refine((data) => data.password === data.confirmPassword, {
   message: "Passwords don't match",
   path: ['confirmPassword'],
@@ -38,6 +41,9 @@ export default function RegisterPage() {
     formState: { errors },
   } = useForm<RegisterForm>({
     resolver: zodResolver(registerSchema),
+    defaultValues: {
+      acceptLegal: false,
+    },
   })
 
   const password = watch('password', '')
@@ -163,9 +169,33 @@ export default function RegisterPage() {
           </div>
         )}
 
-        <p className="rounded-2xl bg-slate-50 p-4 text-sm leading-6 text-slate-600">
-          By creating an account, you agree to the platform Terms of Service and Privacy Policy.
-        </p>
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+          <label className="flex cursor-pointer items-start gap-3 text-sm leading-6 text-slate-700">
+            <input
+              type="checkbox"
+              className="mt-1 h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500"
+              {...register('acceptLegal', { valueAsBoolean: true })}
+            />
+            <span>
+              I agree to the{' '}
+              <Link to="/terms" className="font-semibold text-primary-600 hover:text-primary-700">
+                Terms of Service
+              </Link>
+              ,{' '}
+              <Link to="/privacy" className="font-semibold text-primary-600 hover:text-primary-700">
+                Privacy Policy
+              </Link>
+              , and{' '}
+              <Link to="/cookies" className="font-semibold text-primary-600 hover:text-primary-700">
+                Cookie Policy
+              </Link>
+              .
+            </span>
+          </label>
+          {errors.acceptLegal?.message && (
+            <p className="mt-2 text-sm text-red-600">{errors.acceptLegal.message}</p>
+          )}
+        </div>
 
         <Button
           type="submit"

@@ -5,6 +5,7 @@ import { BrowserRouter } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
 import { ErrorBoundary } from './components/common/ErrorBoundary'
 import App from './App.tsx'
+import CookieConsentBanner from './components/legal/CookieConsentBanner'
 import './index.css'
 
 const queryClient = new QueryClient({
@@ -23,6 +24,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
       <QueryClientProvider client={queryClient}>
         <BrowserRouter>
           <App />
+          <CookieConsentBanner />
         <Toaster 
           position="top-right"
           toastOptions={{
