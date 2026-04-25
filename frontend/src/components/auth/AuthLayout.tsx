@@ -23,7 +23,10 @@ export default function AuthLayout({ title, subtitle, children }: AuthLayoutProp
 
         <div className="relative z-10 flex h-full w-full flex-col justify-between p-12 xl:p-16">
           <div className="inline-flex w-fit items-center gap-3 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm font-semibold text-white shadow-2xl shadow-slate-950/30 backdrop-blur">
-            <span className="h-2.5 w-2.5 rounded-full bg-primary-300 shadow-[0_0_20px_rgba(110,231,183,0.9)]" />
+            <span className="relative flex h-3 w-3 shrink-0 items-center justify-center">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary-300/70 opacity-75" />
+              <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-primary-300 shadow-[0_0_14px_rgba(110,231,183,0.95)]" />
+            </span>
             WhatsApp API Platform
           </div>
 
