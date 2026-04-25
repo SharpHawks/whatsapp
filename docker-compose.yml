@@ -1,0 +1,294 @@
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: whatsapp-postgres
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_DB: whatsapp_api
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    networks:
+      - whatsapp-network
+
+  # Redis
+  redis:
+    image: redis:7-alpine
+    container_name: whatsapp-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: >
+      redis-server
+      --appendonly yes
+      --appendfsync everysec
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    networks:
+      - whatsapp-network
+
+  # RabbitMQ
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: whatsapp-rabbitmq
+    ports:
+      - "5672:5672"   # AMQP port
+      - "15672:15672" # Management UI
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-whatsapp}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-changeme}
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    networks:
+      - whatsapp-network
+
+  # Adminer (Database Management Tool)
+  adminer:
+    image: adminer:latest
+    container_name: whatsapp-adminer
+    ports:
+      - "5050:8080"
+    environment:
+      ADMINER_DEFAULT_SERVER: postgres
+      ADMINER_DESIGN: pepa-linha
+    depends_on:
+      - postgres
+    restart: unless-stopped
+    networks:
+      - whatsapp-network
+
+  # Prometheus (metrics collection)
+  prometheus:
+    image: prom/prometheus:v2.47.2
+    container_name: whatsapp-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.enable-lifecycle'
+    restart: unless-stopped
+    networks:
+      - whatsapp-network
+    profiles:
+      - monitoring
+
+  # Grafana Loki (optional - for log aggregation)
+  loki:
+    image: grafana/loki:2.9.2
+    container_name: whatsapp-loki
+    ports:
+      - "3100:3100"
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - loki-data:/loki
+    restart: unless-stopped
+    networks:
+      - whatsapp-network
+    profiles:
+      - monitoring
+
+  # Grafana (optional - for log visualization)
+  grafana:
+    image: grafana/grafana:10.2.2
+    container_name: whatsapp-grafana
+    ports:
+      - "3002:3000"  # 3002 to avoid conflict with message-worker (3001)
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SERVER_HTTP_ADDRESS: "0.0.0.0"
+      GF_SERVER_ROOT_URL: "http://localhost:3002"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    depends_on:
+      - loki
+      - prometheus
+    restart: unless-stopped
+    networks:
+      - whatsapp-network
+    profiles:
+      - monitoring
+
+  # Main API Server
+  api-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: whatsapp-api
+    ports:
+      - "127.0.0.1:3000:3000"  # Only bind to localhost, Apache will proxy
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      WORKER_ENABLED: "false"
+
+      # Database
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: whatsapp_api
+      DB_USER: postgres
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+
+      # Redis
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+
+      # RabbitMQ (use RABBITMQ_USER/RABBITMQ_PASSWORD from .env for production)
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-whatsapp}:${RABBITMQ_PASSWORD:-changeme}@rabbitmq:5672
+      RABBITMQ_CONNECT_ATTEMPTS: ${RABBITMQ_CONNECT_ATTEMPTS:-10}
+      RABBITMQ_CONNECT_RETRY_DELAY_MS: ${RABBITMQ_CONNECT_RETRY_DELAY_MS:-2000}
+
+      # JWT (required in production - set in .env)
+      JWT_SECRET: ${JWT_SECRET:-dev_secret_change_in_production}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-dev_refresh_change_in_production}
+      API_KEY_ENCRYPTION_SECRET: ${API_KEY_ENCRYPTION_SECRET:-dev_api_key_encryption_change_in_production}
+
+      # Stripe
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      STRIPE_CURRENCY: ${STRIPE_CURRENCY:-EUR}
+
+      # CORS — set in .env for VPS, e.g. https://app.example.com (comma-separated)
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080,http://127.0.0.1:8080}
+      
+      # Worker config
+      WORKER_HEARTBEAT_INTERVAL: 10000
+      WORKER_HEALTH_CHECK_INTERVAL: 30000
+      SHUTDOWN_TIMEOUT: 30000
+      
+      # Baileys
+      BAILEYS_SESSION_PATH: /app/sessions
+      # Do not open the same session files as message-worker (two Baileys processes break outbound send)
+      SKIP_BAILEYS_RESTORE: "true"
+
+      # Socket.IO Redis adapter (required for PM2 cluster)
+      SOCKETIO_REDIS_ADAPTER: "true"
+      SOCKET_PATH: ${SOCKET_PATH:-/socket.io}
+    volumes:
+      - sessions-data:/app/sessions
+      - ./logs:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - whatsapp-network
+    command: node dist/index.js
+
+  # Message Worker
+  message-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: whatsapp-worker
+    ports:
+      - "127.0.0.1:3001:3001"  # Health + Prometheus metrics
+    environment:
+      NODE_ENV: production
+      WORKER_ENABLED: "true"
+      
+      # Database
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: whatsapp_api
+      DB_USER: postgres
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      
+      # Redis
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      
+      # RabbitMQ
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-whatsapp}:${RABBITMQ_PASSWORD:-changeme}@rabbitmq:5672
+      RABBITMQ_CONNECT_ATTEMPTS: ${RABBITMQ_CONNECT_ATTEMPTS:-10}
+      RABBITMQ_CONNECT_RETRY_DELAY_MS: ${RABBITMQ_CONNECT_RETRY_DELAY_MS:-2000}
+
+      # JWT
+      JWT_SECRET: ${JWT_SECRET:-dev_secret_change_in_production}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-dev_refresh_change_in_production}
+      API_KEY_ENCRYPTION_SECRET: ${API_KEY_ENCRYPTION_SECRET:-dev_api_key_encryption_change_in_production}
+
+      # Worker config
+      WORKER_HEARTBEAT_INTERVAL: 10000
+      WORKER_HEALTH_CHECK_INTERVAL: 30000
+      SHUTDOWN_TIMEOUT: 30000
+      
+      # Baileys
+      BAILEYS_SESSION_PATH: /app/sessions
+    volumes:
+      - sessions-data:/app/sessions
+      - ./logs:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      api-server:
+        condition: service_started
+    restart: unless-stopped
+    networks:
+      - whatsapp-network
+    command: node dist/workers/message.worker.js
+
+  # Frontend: container listens on :80; host port below must be free (80 often taken by system nginx)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: whatsapp-frontend
+    ports:
+      # "80:80" — if you get "address already in use", run: sudo ss -tlnp | grep ':80'  then stop that service, or keep 8080:80
+      - "8080:80"
+    depends_on:
+      - api-server
+    restart: unless-stopped
+    networks:
+      - whatsapp-network
+
+volumes:
+  postgres-data:
+  redis-data:
+  rabbitmq-data:
+  sessions-data:
+  loki-data:
+  grafana-data:
+  prometheus-data:
+
+networks:
+  whatsapp-network:
+    driver: bridge

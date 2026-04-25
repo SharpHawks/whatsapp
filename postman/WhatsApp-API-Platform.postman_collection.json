@@ -1,0 +1,646 @@
+{
+  "info": {
+    "name": "WhatsApp API Platform",
+    "description": "Complete API collection for WhatsApp API Platform",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{accessToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000/api/v1",
+      "type": "string"
+    },
+    {
+      "key": "accessToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "botId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "apiKey",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "Register",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    console.log('User registered successfully');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"test@example.com\",\n  \"password\": \"SecurePassword123!\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "register"]
+            },
+            "description": "Register a new user account"
+          }
+        },
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.collectionVariables.set('accessToken', jsonData.accessToken);",
+                  "    console.log('Access token saved:', jsonData.accessToken.substring(0, 20) + '...');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"indrikis38@gmail.com\",\n  \"password\": \"edgars1213\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            },
+            "description": "Login and get access token (automatically saved to collection variables)"
+          }
+        },
+        {
+          "name": "Refresh Token",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"your_refresh_token_here\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/refresh",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "refresh"]
+            },
+            "description": "Refresh access token using refresh token"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Bots",
+      "item": [
+        {
+          "name": "Get All Bots",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var jsonData = pm.response.json();",
+                  "    if (jsonData.bots && jsonData.bots.length > 0) {",
+                  "        pm.collectionVariables.set('botId', jsonData.bots[0].id);",
+                  "        console.log('Bot ID saved:', jsonData.bots[0].id);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/bots",
+              "host": ["{{baseUrl}}"],
+              "path": ["bots"]
+            },
+            "description": "Get list of all bots for current user"
+          }
+        },
+        {
+          "name": "Create Bot",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.collectionVariables.set('botId', jsonData.bot.id);",
+                  "    console.log('New bot created with ID:', jsonData.bot.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"My Test Bot\",\n  \"webhookUrl\": \"https://example.com/webhook\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/bots",
+              "host": ["{{baseUrl}}"],
+              "path": ["bots"]
+            },
+            "description": "Create a new bot"
+          }
+        },
+        {
+          "name": "Get Bot Details",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/bots/{{botId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["bots", "{{botId}}"]
+            },
+            "description": "Get details of a specific bot"
+          }
+        },
+        {
+          "name": "Update Bot",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Bot Name\",\n  \"webhookUrl\": \"https://example.com/new-webhook\",\n  \"autoResponseEnabled\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/bots/{{botId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["bots", "{{botId}}"]
+            },
+            "description": "Update bot settings"
+          }
+        },
+        {
+          "name": "Delete Bot",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/bots/{{botId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["bots", "{{botId}}"]
+            },
+            "description": "Delete a bot"
+          }
+        },
+        {
+          "name": "Get QR Code",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/bots/{{botId}}/qr",
+              "host": ["{{baseUrl}}"],
+              "path": ["bots", "{{botId}}", "qr"]
+            },
+            "description": "Get QR code for WhatsApp connection"
+          }
+        },
+        {
+          "name": "Disconnect Bot",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/bots/{{botId}}/disconnect",
+              "host": ["{{baseUrl}}"],
+              "path": ["bots", "{{botId}}", "disconnect"]
+            },
+            "description": "Disconnect bot from WhatsApp"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Messages",
+      "item": [
+        {
+          "name": "Send Text Message",
+          "request": {
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "value",
+                  "value": "{{apiKey}}",
+                  "type": "string"
+                },
+                {
+                  "key": "key",
+                  "value": "X-API-Key",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"to\": \"37128344474\",\n  \"type\": \"text\",\n  \"content\": {\n    \"text\": \"Hello from API!\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/messages/send",
+              "host": ["{{baseUrl}}"],
+              "path": ["messages", "send"]
+            },
+            "description": "Send a text message (requires API key)"
+          }
+        },
+        {
+          "name": "Send Image Message",
+          "request": {
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "value",
+                  "value": "{{apiKey}}",
+                  "type": "string"
+                },
+                {
+                  "key": "key",
+                  "value": "X-API-Key",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"to\": \"37128344474\",\n  \"type\": \"image\",\n  \"content\": {\n    \"url\": \"https://example.com/image.jpg\",\n    \"caption\": \"Check out this image!\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/messages/send",
+              "host": ["{{baseUrl}}"],
+              "path": ["messages", "send"]
+            },
+            "description": "Send an image message"
+          }
+        },
+        {
+          "name": "Get Messages",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/bots/{{botId}}/messages?limit=50&offset=0",
+              "host": ["{{baseUrl}}"],
+              "path": ["bots", "{{botId}}", "messages"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "50"
+                },
+                {
+                  "key": "offset",
+                  "value": "0"
+                }
+              ]
+            },
+            "description": "Get message history for a bot"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Quota & Subscription",
+      "item": [
+        {
+          "name": "Get My Quota",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/quota/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["quota", "me"]
+            },
+            "description": "Get current user's quota and subscription info"
+          }
+        },
+        {
+          "name": "Get Usage History",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/quota/usage?days=30",
+              "host": ["{{baseUrl}}"],
+              "path": ["quota", "usage"],
+              "query": [
+                {
+                  "key": "days",
+                  "value": "30"
+                }
+              ]
+            },
+            "description": "Get usage history for the last N days"
+          }
+        },
+        {
+          "name": "Get Available Plans",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/quota/plans",
+              "host": ["{{baseUrl}}"],
+              "path": ["quota", "plans"]
+            },
+            "description": "Get list of available subscription plans"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin",
+      "item": [
+        {
+          "name": "Get All Connections",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/connections",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "connections"]
+            },
+            "description": "Get all bot connections (Owner only)"
+          }
+        },
+        {
+          "name": "Get Connection by Bot ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/connections/{{botId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "connections", "{{botId}}"]
+            },
+            "description": "Get connection status for specific bot"
+          }
+        },
+        {
+          "name": "Cleanup Stale Connections",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/connections/cleanup",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "connections", "cleanup"]
+            },
+            "description": "Cleanup stale connections (Owner only)"
+          }
+        },
+        {
+          "name": "Get All Workers",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/workers",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "workers"]
+            },
+            "description": "Get list of all workers (Owner only)"
+          }
+        },
+        {
+          "name": "Get Worker Details",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/workers/worker-1",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "workers", "worker-1"]
+            },
+            "description": "Get details of specific worker"
+          }
+        },
+        {
+          "name": "Get Admin Stats",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/stats",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "stats"]
+            },
+            "description": "Get system statistics (Owner only)"
+          }
+        },
+        {
+          "name": "Get System Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/system-health",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "system-health"]
+            },
+            "description": "Get system health metrics"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auto Response",
+      "item": [
+        {
+          "name": "Get Auto Response Rules",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/bots/{{botId}}/auto-responses",
+              "host": ["{{baseUrl}}"],
+              "path": ["bots", "{{botId}}", "auto-responses"]
+            },
+            "description": "Get all auto-response rules for a bot"
+          }
+        },
+        {
+          "name": "Create Auto Response Rule",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"keyword\": \"hello\",\n  \"response\": \"Hi! How can I help you today?\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/bots/{{botId}}/auto-responses",
+              "host": ["{{baseUrl}}"],
+              "path": ["bots", "{{botId}}", "auto-responses"]
+            },
+            "description": "Create a new auto-response rule"
+          }
+        },
+        {
+          "name": "Update Auto Response Rule",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"keyword\": \"hello\",\n  \"response\": \"Hello! Welcome to our service!\",\n  \"isActive\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/bots/{{botId}}/auto-responses/:ruleId",
+              "host": ["{{baseUrl}}"],
+              "path": ["bots", "{{botId}}", "auto-responses", ":ruleId"],
+              "variable": [
+                {
+                  "key": "ruleId",
+                  "value": "rule-uuid-here"
+                }
+              ]
+            },
+            "description": "Update an auto-response rule"
+          }
+        },
+        {
+          "name": "Delete Auto Response Rule",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/bots/{{botId}}/auto-responses/:ruleId",
+              "host": ["{{baseUrl}}"],
+              "path": ["bots", "{{botId}}", "auto-responses", ":ruleId"],
+              "variable": [
+                {
+                  "key": "ruleId",
+                  "value": "rule-uuid-here"
+                }
+              ]
+            },
+            "description": "Delete an auto-response rule"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Health Check",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/health",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["health"]
+            },
+            "description": "Check API health status"
+          }
+        }
+      ]
+    }
+  ]
+}
