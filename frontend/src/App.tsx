@@ -4,6 +4,8 @@ import { useAuthStore } from './stores/authStore'
 import { socketClient } from './lib/socket'
 import LoginPage from './pages/auth/LoginPage'
 import RegisterPage from './pages/auth/RegisterPage'
+import LandingPage from './pages/LandingPage'
+import PlansPage from './pages/plans/PlansPage'
 import Layout from './components/layout/Layout'
 import DashboardPage from './pages/DashboardPage'
 import BotsPage from './pages/BotsPage'
@@ -36,15 +38,24 @@ function App() {
     }
   }, [isAuthenticated])
 
+  // Public routes (available to everyone)
+  const publicRoutes = (
+    <>
+      <Route path="/" element={<LandingPage />} />
+      <Route path="/plans" element={<PlansPage />} />
+      <Route path="/login" element={<LoginPage />} />
+      <Route path="/register" element={<RegisterPage />} />
+      <Route path="/terms" element={<TermsPage />} />
+      <Route path="/privacy" element={<PrivacyPage />} />
+      <Route path="/cookies" element={<CookiesPage />} />
+    </>
+  )
+
   if (!isAuthenticated) {
     return (
       <Routes>
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/register" element={<RegisterPage />} />
-        <Route path="/terms" element={<TermsPage />} />
-        <Route path="/privacy" element={<PrivacyPage />} />
-        <Route path="/cookies" element={<CookiesPage />} />
-        <Route path="*" element={<Navigate to="/login" replace />} />
+        {publicRoutes}
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     )
   }
@@ -52,17 +63,15 @@ function App() {
   return (
     <Layout>
       <Routes>
-        <Route path="/" element={<DashboardPage />} />
+        {publicRoutes}
+        <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/bots" element={<BotsPage />} />
         <Route path="/bots/:botId" element={<BotDetailsPage />} />
         <Route path="/messages" element={<MessagesPage />} />
         <Route path="/send" element={<SendMessagePage />} />
         <Route path="/billing" element={<BillingPage />} />
         <Route path="/settings" element={<SettingsPage />} />
-        <Route path="/terms" element={<TermsPage />} />
-        <Route path="/privacy" element={<PrivacyPage />} />
-        <Route path="/cookies" element={<CookiesPage />} />
-        
+
         {/* Admin routes */}
         {isAdmin && (
           <>
@@ -71,8 +80,8 @@ function App() {
             <Route path="/admin/connections" element={<AdminConnections />} />
           </>
         )}
-        
-        <Route path="*" element={<Navigate to="/" replace />} />
+
+        <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
     </Layout>
   )

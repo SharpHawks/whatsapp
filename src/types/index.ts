@@ -5,6 +5,9 @@ export interface User {
   passwordHash: string;
   emailVerified: boolean;
   role: 'user' | 'admin' | 'owner';
+  stripeCustomerId?: string;
+  trialEndsAt?: Date;
+  trialUsed: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -135,6 +138,53 @@ export interface AuthToken {
   accessToken: string;
   refreshToken: string;
   expiresIn: number;
+}
+
+// Subscription types
+export interface SubscriptionPlan {
+  id: string;
+  name: string;
+  slug: string;
+  description: string;
+  priceMonthly: number;
+  priceYearly: number;
+  messageQuota: number;
+  botLimit: number;
+  features: string[];
+  stripePriceId?: string;
+  stripePriceIdYearly?: string;
+  isActive: boolean;
+  sortOrder: number;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface UserSubscription {
+  id: string;
+  userId: string;
+  planId: string;
+  status: 'active' | 'cancelled' | 'expired' | 'suspended';
+  currentPeriodStart: Date;
+  currentPeriodEnd: Date;
+  messagesUsed: number;
+  stripeSubscriptionId?: string;
+  stripePaymentIntentId?: string;
+  billingInterval: 'monthly' | 'yearly';
+  cancelAtPeriodEnd: boolean;
+  cancelledAt?: Date;
+  renewalCount: number;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface SubscriptionEvent {
+  id: string;
+  userId: string;
+  planId?: string;
+  eventType: 'subscription_created' | 'subscription_updated' | 'subscription_cancelled' | 'subscription_expired' | 'subscription_renewed' | 'plan_changed' | 'payment_failed' | 'payment_succeeded';
+  stripeEventId?: string;
+  metadata?: Record<string, any>;
+  createdAt: Date;
 }
 
 // Error types

@@ -3,6 +3,7 @@ import { AuthRequest } from './auth.middleware';
 import { db } from '../database';
 import { AuthorizationError } from '../utils/errors';
 import { logger } from '../utils/logger';
+import { subscriptionService } from '../services/subscription.service';
 
 interface UserQuota {
   role: string;
@@ -35,7 +36,7 @@ export async function checkUnlimitedAccess(userId: string): Promise<boolean> {
  */
 export async function getUserQuota(userId: string): Promise<UserQuota> {
   const query = `
-    SELECT 
+    SELECT
       u.role,
       u.unlimited_access,
       COALESCE(sp.message_quota, 100) as message_quota,
@@ -84,7 +85,7 @@ export async function checkMessageQuota(
 
     if (hasUnlimitedAccess) {
       logger.info(`Quota check bypassed for owner user: ${req.userId}`);
-      
+
       // Log the bypass for audit trail
       await db.query(
         `INSERT INTO usage_logs (user_id, bot_id, action_type, resource_count, bypassed)
@@ -112,13 +113,8 @@ export async function checkMessageQuota(
       [req.userId, req.botId || null]
     );
 
-    // Increment usage counter
-    await db.query(
-      `UPDATE user_subscriptions 
-       SET messages_used = messages_used + 1, updated_at = CURRENT_TIMESTAMP
-       WHERE user_id = $1 AND status = 'active'`,
-      [req.userId]
-    );
+    // Increment usage counter via subscription service
+    await subscriptionService.incrementMessageUsage(req.userId);
 
     logger.info(
       `Message quota check passed for user ${req.userId}: ${quota.messagesUsed + 1}/${quota.messageQuota}`

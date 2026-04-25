@@ -7,7 +7,8 @@ interface User {
   email: string
   role?: 'user' | 'admin' | 'owner'
   emailVerified: boolean
-  balance?: number
+  trialEndsAt?: string
+  trialUsed: boolean
   createdAt?: string
 }
 
@@ -33,7 +34,8 @@ function decodeUserFromAccessToken(accessToken: string, fallbackEmail?: string):
     email: payload.email || fallbackEmail || '',
     role: payload.role || 'user',
     emailVerified: payload.emailVerified || false,
-    balance: payload.balance,
+    trialEndsAt: payload.trialEndsAt,
+    trialUsed: payload.trialUsed || false,
   }
 }
 
@@ -114,7 +116,7 @@ export const useAuthStore = create<AuthState>()(
           })
 
           const { accessToken: newAccessToken, refreshToken: newRefreshToken } = response.data
-          
+
           const currentUser = get().user
           const user = decodeUserFromAccessToken(newAccessToken, currentUser?.email)
 

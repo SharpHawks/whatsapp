@@ -11,6 +11,7 @@ import {
   UserGroupIcon,
   ChartBarIcon,
   SparklesIcon,
+  Squares2X2Icon,
 } from '@heroicons/react/24/outline'
 import { useAuthStore } from '../../stores/authStore'
 import { cn } from '../../lib/utils'
@@ -21,7 +22,7 @@ interface SidebarProps {
 }
 
 const navigation = [
-  { name: 'Dashboard', href: '/', icon: HomeIcon },
+  { name: 'Dashboard', href: '/dashboard', icon: HomeIcon },
   { name: 'Bots', href: '/bots', icon: ChatBubbleLeftRightIcon },
   { name: 'Messages', href: '/messages', icon: ChatBubbleLeftRightIcon },
   { name: 'Send Message', href: '/send', icon: PaperAirplaneIcon },

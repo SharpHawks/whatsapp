@@ -1,67 +1,72 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import {
   CreditCardIcon,
   ExclamationTriangleIcon,
   ArrowDownTrayIcon,
   SparklesIcon,
+  CheckIcon,
+  XMarkIcon,
+  ArrowPathIcon,
+  ArrowTopRightOnSquareIcon,
 } from '@heroicons/react/24/outline'
-import { useQueryClient } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
 import Button from '../components/common/Button'
 import Card from '../components/common/Card'
 import Badge from '../components/common/Badge'
 import Spinner from '../components/common/Spinner'
 import { formatCurrency, formatDateTime } from '../lib/utils'
-import { useBalance, useCreateTopup, useTransactions } from '../hooks/useBilling'
-import { useQuota } from '../hooks/useQuota'
-import type { UsageStats } from '../types/billing'
+import { useTransactions } from '../hooks/useBilling'
+import {
+  useCurrentSubscription,
+  useCancelSubscription,
+  useReactivateSubscription,
+  useBillingPortal,
+} from '../hooks/useSubscription'
 import toast from 'react-hot-toast'
 
-// Mock usage stats for now
-const mockUsageStats: UsageStats = {
-  messagesThisMonth: 0,
-  costThisMonth: 0,
-  projectedMonthlyCost: 0,
-  pricePerMessage: 0.01,
-}
-
 export default function BillingPage() {
-  const { data: quotaInfo, isLoading: quotaLoading } = useQuota()
-  const { data: balanceData, isLoading: balanceLoading } = useBalance()
+  const { data: subInfo, isLoading: subLoading } = useCurrentSubscription()
   const { data: transactions = [], isLoading: transactionsLoading } = useTransactions()
-  const [usageStats] = useState<UsageStats>(mockUsageStats)
-  const [isAddFundsModalOpen, setIsAddFundsModalOpen] = useState(false)
-  const [selectedAmount, setSelectedAmount] = useState<number>(50)
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false)
 
-  const balance = balanceData ? parseFloat(balanceData.amount) : 0
-  const currency = balanceData?.currency || 'EUR'
-  const isLowBalance = balance < 10 // Low balance threshold
-  const queryClient = useQueryClient()
-  const createTopup = useCreateTopup()
-  
-  // Check if user is owner with unlimited access
-  const isOwner = quotaInfo?.unlimited === true && quotaInfo?.role === 'owner'
+  const cancelSubscription = useCancelSubscription()
+  const reactivateSubscription = useReactivateSubscription()
+  const billingPortal = useBillingPortal()
 
-  // Listen for real-time balance updates
-  useEffect(() => {
-    const handleBalanceUpdate = () => {
-      // Invalidate balance and transactions queries
-      queryClient.invalidateQueries({ queryKey: ['balance'] })
-      queryClient.invalidateQueries({ queryKey: ['transactions'] })
+  const isOwner = subInfo?.unlimited === true && subInfo?.role === 'owner'
+
+  const handleCancel = async () => {
+    try {
+      await cancelSubscription.mutateAsync()
+      toast.success('Subscription will be cancelled at the end of the current period')
+      setShowCancelConfirm(false)
+    } catch (error: any) {
+      toast.error(error?.response?.data?.error?.message || 'Failed to cancel subscription')
     }
+  }
 
-    window.addEventListener('balance:updated' as any, handleBalanceUpdate)
-    window.addEventListener('balance:low' as any, handleBalanceUpdate)
-    
-    return () => {
-      window.removeEventListener('balance:updated' as any, handleBalanceUpdate)
-      window.removeEventListener('balance:low' as any, handleBalanceUpdate)
+  const handleReactivate = async () => {
+    try {
+      await reactivateSubscription.mutateAsync()
+      toast.success('Subscription reactivated successfully')
+    } catch (error: any) {
+      toast.error(error?.response?.data?.error?.message || 'Failed to reactivate subscription')
     }
-  }, [queryClient])
+  }
 
-  const presetAmounts = [50, 100, 250, 500]
+  const handleManageBilling = async () => {
+    try {
+      const result = await billingPortal.mutateAsync()
+      if (result.url) {
+        window.open(result.url, '_blank')
+      }
+    } catch (error: any) {
+      toast.error(error?.response?.data?.error?.message || 'Failed to open billing portal')
+    }
+  }
 
   // Show loading state
-  if (quotaLoading) {
+  if (subLoading) {
     return (
       <div className="flex justify-center py-12">
         <Spinner size="lg" />
@@ -93,7 +98,7 @@ export default function BillingPage() {
             Owner Account
           </h2>
           <p className="text-gray-600 mb-6 max-w-md mx-auto">
-            You have unlimited access to all platform features. Billing and payment management 
+            You have unlimited access to all platform features. Billing and payment management
             is not applicable for owner accounts.
           </p>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 max-w-2xl mx-auto">
@@ -115,283 +120,274 @@ export default function BillingPage() {
     )
   }
 
+  const plan = subInfo?.plan
+  const usage = subInfo?.usage
+  const subscription = subInfo?.subscription
+  const isFreePlan = plan?.slug === 'free' || plan?.slug === 'none'
+  const isCancelled = subscription?.cancelAtPeriodEnd
+
   return (
     <div className="page-shell">
       <div className="page-header">
         <div className="mb-3 inline-flex rounded-full bg-primary-50 px-3 py-1 text-xs font-semibold text-primary-700 ring-1 ring-primary-200">
-          Payments
+          Billing
         </div>
-        <h1 className="page-title">Billing</h1>
+        <h1 className="page-title">Subscription & Billing</h1>
         <p className="page-description">
-          Manage your account balance and view transaction history
+          Manage your subscription plan and view billing history
         </p>
       </div>
 
-      {/* Balance Card */}
+      {/* Current Plan Card */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
         <Card className="lg:col-span-2">
           <div className="flex items-start justify-between">
             <div className="flex-1">
               <h3 className="text-sm font-medium text-gray-500 mb-2">
-                Current Balance
+                Current Plan
               </h3>
-              {balanceLoading ? (
-                <Spinner size="lg" />
-              ) : (
-                <p className="text-4xl font-bold text-gray-900">
-                  {formatCurrency(balance, currency)}
+              <div className="flex items-center gap-3">
+                <p className="text-3xl font-bold text-gray-900">
+                  {plan?.name || 'No Plan'}
+                </p>
+                {isCancelled && (
+                  <Badge variant="warning">Cancels soon</Badge>
+                )}
+                {!isFreePlan && !isCancelled && subscription?.status === 'active' && (
+                  <Badge variant="success">Active</Badge>
+                )}
+              </div>
+
+              {!isFreePlan && plan?.priceMonthly !== undefined && (
+                <p className="mt-1 text-lg text-gray-600">
+                  {formatCurrency(plan.priceMonthly, 'EUR')}/month
+                  {subscription?.billingInterval === 'yearly' && (
+                    <span className="ml-2 text-sm text-green-600">(Billed yearly)</span>
+                  )}
                 </p>
               )}
-              
-              {isLowBalance && (
-                <div className="mt-4 flex items-center gap-2 text-amber-600">
-                  <ExclamationTriangleIcon className="h-5 w-5" />
-                  <span className="text-sm font-medium">
-                    Low balance warning! Please add funds to continue service.
+
+              {subscription?.currentPeriodEnd && (
+                <p className="mt-2 text-sm text-gray-500">
+                  {isCancelled
+                    ? `Access until ${formatDateTime(subscription.currentPeriodEnd)}`
+                    : `Renews on ${formatDateTime(subscription.currentPeriodEnd)}`
+                  }
+                </p>
+              )}
+
+              {usage && plan?.messageQuota !== null && (
+                <div className="mt-4">
+                  <div className="flex items-center justify-between text-sm mb-1">
+                    <span className="text-gray-600">Messages used</span>
+                    <span className="font-medium text-gray-900">
+                      {usage.messagesUsed} / {plan.messageQuota}
+                    </span>
+                  </div>
+                  <div className="h-2 w-full rounded-full bg-gray-100">
+                    <div
+                      className={`h-2 rounded-full transition-all ${
+                        usage.usagePercentage >= 90
+                          ? 'bg-red-500'
+                          : usage.usagePercentage >= 75
+                          ? 'bg-amber-500'
+                          : 'bg-primary-600'
+                      }`}
+                      style={{ width: `${Math.min(usage.usagePercentage, 100)}%` }}
+                    />
+                  </div>
+                  {usage.usagePercentage >= 90 && (
+                    <div className="mt-2 flex items-center gap-2 text-amber-600">
+                      <ExclamationTriangleIcon className="h-4 w-4" />
+                      <span className="text-xs font-medium">
+                        You are approaching your message limit. Consider upgrading your plan.
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {usage && plan?.botLimit !== null && (
+                <div className="mt-3 flex items-center gap-2 text-sm text-gray-600">
+                  <span>Bots:</span>
+                  <span className="font-medium text-gray-900">
+                    {usage.currentBots} / {plan.botLimit}
                   </span>
                 </div>
               )}
             </div>
-            <Button
-              variant="primary"
-              onClick={() => setIsAddFundsModalOpen(true)}
-            >
-              <CreditCardIcon className="h-5 w-5 mr-2" />
-              Add Funds
-            </Button>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="mt-6 flex flex-wrap gap-3">
+            <Link to="/plans">
+              <Button variant="primary">
+                <ArrowPathIcon className="h-5 w-5 mr-2" />
+                Change Plan
+              </Button>
+            </Link>
+
+            {!isFreePlan && (
+              <Button
+                variant="secondary"
+                onClick={handleManageBilling}
+                isLoading={billingPortal.isPending}
+              >
+                <CreditCardIcon className="h-5 w-5 mr-2" />
+                Manage Billing
+                <ArrowTopRightOnSquareIcon className="h-4 w-4 ml-1" />
+              </Button>
+            )}
+
+            {!isFreePlan && !isCancelled && (
+              <Button
+                variant="danger"
+                onClick={() => setShowCancelConfirm(true)}
+                isLoading={cancelSubscription.isPending}
+              >
+                <XMarkIcon className="h-5 w-5 mr-2" />
+                Cancel Subscription
+              </Button>
+            )}
+
+            {isCancelled && (
+              <Button
+                variant="primary"
+                onClick={handleReactivate}
+                isLoading={reactivateSubscription.isPending}
+              >
+                <CheckIcon className="h-5 w-5 mr-2" />
+                Reactivate Subscription
+              </Button>
+            )}
           </div>
         </Card>
 
+        {/* Quick Stats */}
         <Card>
           <h3 className="text-sm font-medium text-gray-500 mb-4">
-            Quick Stats
+            Plan Features
           </h3>
-          <div className="space-y-3">
-            <div>
-              <p className="text-xs text-gray-500">Messages this month</p>
-              <p className="text-lg font-semibold text-gray-900">
-                {usageStats.messagesThisMonth.toLocaleString()}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs text-gray-500">Cost this month</p>
-              <p className="text-lg font-semibold text-gray-900">
-                {formatCurrency(usageStats.costThisMonth, currency)}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs text-gray-500">Price per message</p>
-              <p className="text-lg font-semibold text-gray-900">
-                {formatCurrency(usageStats.pricePerMessage, currency)}
-              </p>
-            </div>
-          </div>
+          <ul className="space-y-2">
+            {plan?.features?.map((feature: string, idx: number) => (
+              <li key={idx} className="flex items-start gap-2 text-sm text-gray-600">
+                <CheckIcon className="h-4 w-4 shrink-0 text-green-500 mt-0.5" />
+                {feature}
+              </li>
+            )) || (
+              <li className="text-sm text-gray-500">No features listed</li>
+            )}
+          </ul>
         </Card>
       </div>
 
-      {/* Usage Statistics */}
-      <Card className="mb-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">
-          Usage Statistics
-        </h3>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-          <div>
-            <p className="text-sm text-gray-500">Messages This Month</p>
-            <p className="mt-2 text-2xl font-semibold text-gray-900">
-              {usageStats.messagesThisMonth.toLocaleString()}
-            </p>
-          </div>
-          <div>
-            <p className="text-sm text-gray-500">Cost This Month</p>
-            <p className="mt-2 text-2xl font-semibold text-gray-900">
-              {formatCurrency(usageStats.costThisMonth, currency)}
-            </p>
-          </div>
-          <div>
-            <p className="text-sm text-gray-500">Projected Monthly Cost</p>
-            <p className="mt-2 text-2xl font-semibold text-gray-900">
-              {formatCurrency(usageStats.projectedMonthlyCost, currency)}
-            </p>
-          </div>
-        </div>
-      </Card>
-
-      {/* Transaction History */}
+      {/* Legacy Transaction History */}
       <Card>
         <h3 className="text-lg font-semibold text-gray-900 mb-4">
           Transaction History
         </h3>
+        <p className="text-sm text-gray-500 mb-4">
+          Legacy wallet transactions from the previous billing system.
+        </p>
         {transactionsLoading ? (
           <div className="flex justify-center py-8">
             <Spinner size="lg" />
           </div>
+        ) : transactions.length === 0 ? (
+          <p className="text-sm text-gray-500 py-4">No transactions found.</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
-            <thead>
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Date
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Description
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Amount
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Status
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {transactions.map((transaction) => (
-                <tr key={transaction.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {formatDateTime(transaction.createdAt)}
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-900">
-                    {transaction.description}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                    <span
-                      className={
-                        transaction.type === 'topup'
-                          ? 'text-green-600'
-                          : 'text-gray-900'
-                      }
-                    >
-                      {transaction.type === 'topup' ? '+' : '-'}
-                      {formatCurrency(Math.abs(transaction.amount), currency)}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <Badge
-                      variant={
-                        transaction.status === 'completed'
-                          ? 'success'
-                          : transaction.status === 'pending'
-                          ? 'warning'
-                          : 'error'
-                      }
-                    >
-                      {transaction.status}
-                    </Badge>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm">
-                    {transaction.type === 'topup' && transaction.status === 'completed' && (
-                      <button className="text-primary-600 hover:text-primary-700">
-                        <ArrowDownTrayIcon className="h-5 w-5" />
-                      </button>
-                    )}
-                  </td>
+              <thead>
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Date
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Description
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Amount
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Status
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {transactions.map((transaction) => (
+                  <tr key={transaction.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {formatDateTime(transaction.createdAt)}
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-900">
+                      {transaction.description}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                      <span
+                        className={
+                          transaction.type === 'topup'
+                            ? 'text-green-600'
+                            : 'text-gray-900'
+                        }
+                      >
+                        {transaction.type === 'topup' ? '+' : '-'}
+                        {formatCurrency(Math.abs(transaction.amount), 'EUR')}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <Badge
+                        variant={
+                          transaction.status === 'completed'
+                            ? 'success'
+                            : transaction.status === 'pending'
+                            ? 'warning'
+                            : 'error'
+                        }
+                      >
+                        {transaction.status}
+                      </Badge>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </Card>
 
-      {/* Add Funds Modal */}
-      {isAddFundsModalOpen && (
+      {/* Cancel Confirmation Modal */}
+      {showCancelConfirm && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50"
-          onClick={() => setIsAddFundsModalOpen(false)}
+          onClick={() => setShowCancelConfirm(false)}
         >
           <div
             className="bg-white rounded-lg p-6 max-w-md w-full mx-4"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-start justify-between mb-4">
-              <h2 className="text-xl font-bold text-gray-900">Add Funds</h2>
-              <button
-                onClick={() => setIsAddFundsModalOpen(false)}
-                className="text-gray-400 hover:text-gray-600"
+            <h2 className="text-xl font-bold text-gray-900 mb-2">Cancel Subscription?</h2>
+            <p className="text-gray-600 mb-6">
+              Your subscription will remain active until{' '}
+              <strong>{subscription?.currentPeriodEnd ? formatDateTime(subscription.currentPeriodEnd) : 'the end of the current period'}</strong>.
+              After that, you will be downgraded to the Free plan.
+            </p>
+            <div className="flex gap-3">
+              <Button
+                variant="secondary"
+                onClick={() => setShowCancelConfirm(false)}
+                className="flex-1"
               >
-                ✕
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Select Amount
-                </label>
-                <div className="grid grid-cols-2 gap-3">
-                  {presetAmounts.map((amount) => (
-                    <button
-                      key={amount}
-                      onClick={() => setSelectedAmount(amount)}
-                      className={`p-4 rounded-lg border-2 transition-colors ${
-                        selectedAmount === amount
-                          ? 'border-primary-600 bg-primary-50'
-                          : 'border-gray-200 hover:border-gray-300'
-                      }`}
-                    >
-                      <span className="text-lg font-semibold text-gray-900">
-                        {formatCurrency(amount, currency)}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Or Enter Custom Amount
-                </label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">
-                    €
-                  </span>
-                  <input
-                    type="number"
-                    value={selectedAmount}
-                    onChange={(e) => setSelectedAmount(Number(e.target.value))}
-                    className="input pl-8"
-                    min="50"
-                    step="1"
-                  />
-                </div>
-              </div>
-
-              <div className="bg-blue-50 border border-blue-200 rounded-md p-4">
-                <p className="text-sm text-blue-800">
-                  <strong>Stripe:</strong> A payment intent will be created on the server.
-                  Use the returned client secret with your Stripe payment form to complete the top-up.
-                </p>
-              </div>
-
-              <div className="flex gap-3 mt-6">
-                <Button
-                  variant="secondary"
-                  onClick={() => setIsAddFundsModalOpen(false)}
-                  className="flex-1"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  variant="primary"
-                  onClick={async () => {
-                    try {
-                      await createTopup.mutateAsync(selectedAmount)
-                      toast.success('Payment intent created. Complete the payment in your Stripe form.')
-                      setIsAddFundsModalOpen(false)
-                    } catch (error: any) {
-                      toast.error(error?.response?.data?.error?.message || 'Failed to create payment intent')
-                    }
-                  }}
-                  className="flex-1"
-                  isLoading={createTopup.isPending}
-                  disabled={createTopup.isPending || selectedAmount < 50}
-                >
-                  Continue to Payment
-                </Button>
-              </div>
+                Keep Subscription
+              </Button>
+              <Button
+                variant="danger"
+                onClick={handleCancel}
+                isLoading={cancelSubscription.isPending}
+                className="flex-1"
+              >
+                Cancel Subscription
+              </Button>
             </div>
           </div>
         </div>

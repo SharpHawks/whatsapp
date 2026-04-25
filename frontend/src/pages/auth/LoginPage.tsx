@@ -38,7 +38,7 @@ export default function LoginPage() {
     try {
       await login(normalizeEmail(data.email), data.password)
       toast.success('Welcome back!')
-      navigate('/')
+      navigate('/dashboard')
     } catch (error: any) {
       const message = error.response?.data?.error?.message || 'Invalid email or password'
       setServerError(message)

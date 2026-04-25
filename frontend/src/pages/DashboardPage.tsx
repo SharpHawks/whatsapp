@@ -2,21 +2,22 @@ import { useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import {
   ChatBubbleLeftRightIcon,
-  CurrencyEuroIcon,
   DevicePhoneMobileIcon,
   PaperAirplaneIcon,
   PlusIcon,
+  SparklesIcon,
 } from '@heroicons/react/24/outline'
 import { useQueryClient } from '@tanstack/react-query'
 import Card from '../components/common/Card'
 import Spinner from '../components/common/Spinner'
 import Button from '../components/common/Button'
-import { formatCurrency } from '../lib/utils'
 import { useDashboardStats } from '../hooks/useDashboard'
+import { useCurrentSubscription } from '../hooks/useSubscription'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 
 export default function DashboardPage() {
   const { data: stats, isLoading, error } = useDashboardStats()
+  const { data: subInfo } = useCurrentSubscription()
   const queryClient = useQueryClient()
 
   // Listen for real-time updates
@@ -28,7 +29,7 @@ export default function DashboardPage() {
     window.addEventListener('message:new' as any, handleUpdate)
     window.addEventListener('balance:updated' as any, handleUpdate)
     window.addEventListener('bot:status' as any, handleUpdate)
-    
+
     return () => {
       window.removeEventListener('message:new' as any, handleUpdate)
       window.removeEventListener('balance:updated' as any, handleUpdate)
@@ -52,7 +53,9 @@ export default function DashboardPage() {
     )
   }
 
-  const isLowBalance = (stats?.currentBalance || 0) < 10
+  const plan = subInfo?.plan
+  const usage = subInfo?.usage
+  const isQuotaWarning = usage && plan?.messageQuota && usage.messagesRemaining < plan.messageQuota * 0.1
 
   return (
     <div className="page-shell">
@@ -106,18 +109,23 @@ export default function DashboardPage() {
           </div>
         </Card>
 
-        <Card className={isLowBalance ? 'border-red-200 bg-red-50/80' : 'group hover:-translate-y-1 hover:shadow-glow'}>
+        <Card className={isQuotaWarning ? 'border-amber-200 bg-amber-50/80' : 'group hover:-translate-y-1 hover:shadow-glow'}>
           <div className="flex items-center">
-            <div className={`flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl ring-1 ${isLowBalance ? 'bg-red-100 text-red-600 ring-red-200' : 'bg-sky-50 text-sky-600 ring-sky-100'}`}>
-              <CurrencyEuroIcon className="h-6 w-6" />
+            <div className={`flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl ring-1 ${isQuotaWarning ? 'bg-amber-100 text-amber-600 ring-amber-200' : 'bg-sky-50 text-sky-600 ring-sky-100'}`}>
+              <SparklesIcon className="h-6 w-6" />
             </div>
             <div className="ml-4 flex-1">
-              <p className="text-sm font-semibold text-slate-500">Balance</p>
-              <p className={`mt-1 text-3xl font-bold tracking-tight ${isLowBalance ? 'text-red-600' : 'text-slate-950'}`}>
-                {formatCurrency(stats?.currentBalance || 0, 'EUR')}
+              <p className="text-sm font-semibold text-slate-500">Plan</p>
+              <p className={`mt-1 text-2xl font-bold tracking-tight ${isQuotaWarning ? 'text-amber-600' : 'text-slate-950'}`}>
+                {plan?.name || 'Free'}
               </p>
-              {isLowBalance && (
-                <p className="mt-1 text-xs text-red-600">Low balance!</p>
+              {usage && plan?.messageQuota !== null && (
+                <p className="mt-1 text-xs text-slate-500">
+                  {usage.messagesUsed} / {plan.messageQuota} messages
+                </p>
+              )}
+              {isQuotaWarning && (
+                <p className="mt-1 text-xs text-amber-600">Low quota remaining!</p>
               )}
             </div>
           </div>
@@ -189,10 +197,10 @@ export default function DashboardPage() {
                 Create New Bot
               </Button>
             </Link>
-            <Link to="/billing">
+            <Link to="/plans">
               <Button variant="secondary" className="w-full justify-start">
-                <CurrencyEuroIcon className="h-5 w-5 mr-2" />
-                Add Funds
+                <SparklesIcon className="h-5 w-5 mr-2" />
+                Upgrade Plan
               </Button>
             </Link>
             <Link to="/messages">
@@ -225,9 +233,15 @@ export default function DashboardPage() {
               </span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-sm text-gray-600">Current Balance</span>
-              <span className={`text-sm font-semibold ${isLowBalance ? 'text-red-600' : 'text-gray-900'}`}>
-                {formatCurrency(stats?.currentBalance || 0, 'EUR')}
+              <span className="text-sm text-gray-600">Current Plan</span>
+              <span className="text-sm font-semibold text-gray-900">
+                {plan?.name || 'Free'}
+              </span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-gray-600">Messages Remaining</span>
+              <span className="text-sm font-semibold text-gray-900">
+                {usage?.messagesRemaining ?? '∞'}
               </span>
             </div>
           </div>

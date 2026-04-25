@@ -191,6 +191,7 @@ import dashboardRoutes from './routes/dashboard.routes';
 import adminRoutes from './routes/admin.routes';
 import adminStatsRoutes from './routes/admin-stats.routes';
 import quotaRoutes from './routes/quota.routes';
+import subscriptionRoutes from './routes/subscription.routes';
 import testRoutes from './routes/test.routes';
 
 // API routes
@@ -210,6 +211,7 @@ app.use(`/api/${config.server.apiVersion}/media`, mediaRoutes);
 app.use(`/api/${config.server.apiVersion}/billing`, billingRoutes);
 app.use(`/api/${config.server.apiVersion}/dashboard`, dashboardRoutes);
 app.use(`/api/${config.server.apiVersion}/quota`, quotaRoutes);
+app.use(`/api/${config.server.apiVersion}/subscriptions`, subscriptionRoutes);
 app.use(`/api/${config.server.apiVersion}/admin`, adminRoutes);
 app.use(`/api/${config.server.apiVersion}/admin`, adminStatsRoutes);
 

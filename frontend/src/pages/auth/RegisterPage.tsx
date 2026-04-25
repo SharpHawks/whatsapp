@@ -71,7 +71,7 @@ export default function RegisterPage() {
     try {
       await registerUser(normalizeEmail(data.email), data.password)
       toast.success('Account created successfully!')
-      navigate('/')
+      navigate('/dashboard')
     } catch (error: any) {
       const message = error.response?.data?.error?.message || 'Registration failed. Please try again.'
       setServerError(message)
