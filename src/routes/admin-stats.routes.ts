@@ -3,6 +3,28 @@ import { authenticateJWT } from '../middleware/auth.middleware';
 import { requireAdmin } from '../middleware/require-admin.middleware';
 import { db } from '../database';
 import { logger } from '../utils/logger';
+import { cacheService } from '../services/cache.service';
+import amqp, { type ChannelModel } from 'amqplib';
+import { config } from '../config';
+
+async function probeRabbitMq(url: string): Promise<{ ok: boolean; latencyMs: number }> {
+  const start = Date.now();
+  let client: ChannelModel | null = null;
+  try {
+    client = await amqp.connect(url);
+    return { ok: true, latencyMs: Date.now() - start };
+  } catch {
+    return { ok: false, latencyMs: Date.now() - start };
+  } finally {
+    try {
+      if (client) {
+        await client.close();
+      }
+    } catch {
+      // ignore close errors
+    }
+  }
+}
 
 const router = Router();
 
@@ -18,7 +40,7 @@ router.get('/stats', async (req: Request, res: Response) => {
     logger.info('Getting admin stats', { userId: (req as any).userId });
 
     // Get all stats in parallel
-    const [usersStats, botsStats, messagesStats, revenueStats] = await Promise.all([
+    const [usersStats, botsStats, messagesStats, revenueStats, messagesTrendStats] = await Promise.all([
       // Users stats
       db.query(`
         SELECT 
@@ -57,12 +79,31 @@ router.get('/stats', async (req: Request, res: Response) => {
         FROM transactions
         WHERE type = 'topup' AND status = 'completed'
       `),
+
+      db.query(`
+        WITH days AS (
+          SELECT generate_series(CURRENT_DATE - INTERVAL '13 days', CURRENT_DATE, INTERVAL '1 day')::date AS day
+        )
+        SELECT
+          days.day::text as day,
+          COUNT(m.id)::int as message_count
+        FROM days
+        LEFT JOIN messages m ON DATE(m.timestamp) = days.day
+        GROUP BY days.day
+        ORDER BY days.day ASC
+      `),
     ]);
 
     const users = usersStats.rows[0];
     const bots = botsStats.rows[0];
     const messages = messagesStats.rows[0];
     const revenue = revenueStats.rows[0];
+
+    const trendRows = messagesTrendStats.rows as Array<{ day: string; message_count: number }>;
+    const messagesTrend = trendRows.map((row) => ({
+      date: row.day,
+      count: row.message_count,
+    }));
 
     // Calculate growth percentages
     const userGrowth =
@@ -104,6 +145,7 @@ router.get('/stats', async (req: Request, res: Response) => {
           lastMonth: parseFloat(revenue.revenue_last_month),
           growth: revenueGrowth,
         },
+        messagesTrend,
         timestamp: new Date(),
       },
     });
@@ -130,14 +172,11 @@ router.get('/system-health', async (_req: Request, res: Response) => {
     await db.query('SELECT 1');
     const dbResponseTime = Date.now() - dbStart;
 
-    // Get queue stats (if available)
-    let queueStatus = 'Unknown';
-    try {
-      // This would need RabbitMQ management API
-      queueStatus = 'Running';
-    } catch {
-      queueStatus = 'Unknown';
-    }
+    const redisStart = Date.now();
+    const redisOk = await cacheService.healthCheck();
+    const redisLatencyMs = Date.now() - redisStart;
+
+    const rabbit = await probeRabbitMq(config.rabbitmq.url);
 
     // Calculate error rate from recent messages
     const errorStats = await db.query(`
@@ -160,8 +199,13 @@ router.get('/system-health', async (_req: Request, res: Response) => {
           status: dbResponseTime < 100 ? 'Healthy' : 'Slow',
           responseTime: `${dbResponseTime}ms`,
         },
+        redis: {
+          status: redisOk ? 'Healthy' : 'Unavailable',
+          responseTime: `${redisLatencyMs}ms`,
+        },
         queue: {
-          status: queueStatus,
+          status: rabbit.ok ? 'Reachable' : 'Unavailable',
+          responseTime: `${rabbit.latencyMs}ms`,
         },
         errorRate: `${errorRate}%`,
         uptime: process.uptime(),
