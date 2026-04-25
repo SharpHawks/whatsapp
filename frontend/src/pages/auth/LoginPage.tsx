@@ -8,9 +8,10 @@ import toast from 'react-hot-toast'
 import Button from '../../components/common/Button'
 import Input from '../../components/common/Input'
 import AuthLayout from '../../components/auth/AuthLayout'
+import { normalizeEmail } from '../../lib/authValidation'
 
 const loginSchema = z.object({
-  email: z.string().email('Invalid email address'),
+  email: z.string().trim().toLowerCase().email('Invalid email address'),
   password: z.string().min(8, 'Password must be at least 8 characters'),
 })
 
@@ -18,6 +19,8 @@ type LoginForm = z.infer<typeof loginSchema>
 
 export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false)
+  const [serverError, setServerError] = useState<string | null>(null)
+  const [showPassword, setShowPassword] = useState(false)
   const { login } = useAuthStore()
   const navigate = useNavigate()
 
@@ -31,12 +34,14 @@ export default function LoginPage() {
 
   const onSubmit = async (data: LoginForm) => {
     setIsLoading(true)
+    setServerError(null)
     try {
-      await login(data.email, data.password)
+      await login(normalizeEmail(data.email), data.password)
       toast.success('Welcome back!')
       navigate('/')
     } catch (error: any) {
       const message = error.response?.data?.error?.message || 'Invalid email or password'
+      setServerError(message)
       toast.error(message)
     } finally {
       setIsLoading(false)
@@ -61,13 +66,28 @@ export default function LoginPage() {
 
           <Input
             {...register('password')}
-            type="password"
+            type={showPassword ? 'text' : 'password'}
             label="Password"
             placeholder="Enter your password"
             error={errors.password?.message}
             autoComplete="current-password"
+            rightElement={
+              <button
+                type="button"
+                className="text-xs font-semibold text-slate-500 hover:text-primary-700"
+                onClick={() => setShowPassword((value) => !value)}
+              >
+                {showPassword ? 'Hide' : 'Show'}
+              </button>
+            }
           />
         </div>
+
+        {serverError && (
+          <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {serverError}
+          </div>
+        )}
 
         <Button
           type="submit"
