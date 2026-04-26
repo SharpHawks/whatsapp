@@ -8,10 +8,7 @@ import { ValidationError, NotFoundError, ErrorCode } from '../utils/errors';
 
 const router = Router();
 
-// All subscription routes require authentication
-router.use(authenticateJWT);
-
-// Get available subscription plans (public active plans)
+// Get available subscription plans (public, no auth required)
 router.get('/plans', async (_req: Request, res: Response, next: NextFunction) => {
   try {
     const plans = await subscriptionService.getActivePlans();
@@ -20,6 +17,9 @@ router.get('/plans', async (_req: Request, res: Response, next: NextFunction) =>
     next(error);
   }
 });
+
+// All other subscription routes require authentication
+router.use(authenticateJWT);
 
 // Get current user's subscription info
 router.get('/me', async (req: AuthRequest, res: Response, next: NextFunction) => {
