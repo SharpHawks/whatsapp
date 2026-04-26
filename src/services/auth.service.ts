@@ -67,6 +67,14 @@ export class AuthService {
         [user.id, 0, 'EUR']
       );
 
+      // Assign free plan subscription
+      await client.query(
+        `INSERT INTO user_subscriptions (user_id, plan_id, status, billing_interval, current_period_start, current_period_end)
+         SELECT $1, id, 'active', 'monthly', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + INTERVAL '1 month'
+         FROM subscription_plans WHERE slug = 'free'`,
+        [user.id]
+      );
+
       return user;
     });
 

@@ -1,9 +1,10 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useAuthStore } from '../../stores/authStore'
+import { useCreateCheckout } from '../../hooks/useSubscription'
 import toast from 'react-hot-toast'
 import Button from '../../components/common/Button'
 import Input from '../../components/common/Input'
@@ -23,6 +24,11 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const { login } = useAuthStore()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const createCheckout = useCreateCheckout()
+
+  const planSlug = searchParams.get('plan')
+  const billingInterval = searchParams.get('billingInterval') as 'monthly' | 'yearly' | null
 
   const {
     register,
@@ -38,6 +44,23 @@ export default function LoginPage() {
     try {
       await login(normalizeEmail(data.email), data.password)
       toast.success('Welcome back!')
+
+      // If user selected a plan before logging in, start checkout automatically
+      if (planSlug && billingInterval) {
+        try {
+          const result = await createCheckout.mutateAsync({
+            planSlug,
+            billingInterval,
+          })
+          if (result.url) {
+            window.location.href = result.url
+            return
+          }
+        } catch (e: any) {
+          toast.error(e?.response?.data?.error?.message || 'Failed to start checkout')
+        }
+      }
+
       navigate('/dashboard')
     } catch (error: any) {
       const message = error.response?.data?.error?.message || 'Invalid email or password'

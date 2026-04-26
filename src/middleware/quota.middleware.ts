@@ -114,7 +114,10 @@ export async function checkMessageQuota(
     );
 
     // Increment usage counter via subscription service
-    await subscriptionService.incrementMessageUsage(req.userId);
+    const updated = await subscriptionService.incrementMessageUsage(req.userId);
+    if (!updated) {
+      logger.warn(`Message usage not incremented: no active subscription for user ${req.userId}`);
+    }
 
     logger.info(
       `Message quota check passed for user ${req.userId}: ${quota.messagesUsed + 1}/${quota.messageQuota}`

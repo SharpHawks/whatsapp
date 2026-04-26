@@ -23,7 +23,7 @@ export default function PlansPage() {
 
   const handleSubscribe = async (planSlug: string) => {
     if (!isAuthenticated) {
-      navigate('/register')
+      navigate(`/register?plan=${planSlug}&billingInterval=${billingInterval}`)
       return
     }
 

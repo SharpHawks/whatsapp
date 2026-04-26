@@ -364,13 +364,14 @@ export class SubscriptionService {
   /**
    * Increment message usage
    */
-  async incrementMessageUsage(userId: string): Promise<void> {
-    await db.query(
+  async incrementMessageUsage(userId: string): Promise<boolean> {
+    const result = await db.query(
       `UPDATE user_subscriptions
        SET messages_used = messages_used + 1, updated_at = CURRENT_TIMESTAMP
        WHERE user_id = $1`,
       [userId]
     );
+    return (result.rowCount ?? 0) > 0;
   }
 
   /**

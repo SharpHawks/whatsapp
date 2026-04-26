@@ -1,0 +1,48 @@
+Hello,   
+
+A recent network security scan suggests your Droplet ubuntu-s-1vcpu-512mb-10gb-fra1 is running Redis and that it may be unintentionally exposing data or misconfigured to allow unauthorized access.   
+
+Redis listens for traffic from everywhere on port 6379, and you can validate this report by attempting to connect to your Redis on 6379 via a simple telnet command:           
+
+        telnet 165.245.220.104 6379   
+
+If the connection is successful, you will receive output like the following, which will confirm that your Redis installation is visible to the public Internet:         
+
+        Trying 165.245.220.104...       
+        Connected to 165.245.220.104.   
+        Escape character is '^]'.   
+
+You will want to restrict outside access to your Redis instance to prevent outsiders from reading or obtaining your data.   
+
+Remediation of this issue will take just a few minutes and is relatively straightforward. You will need to open /etc/redis/redis.conf and uncomment (remove the “#”) or modify the line beginning with:   
+
+        #bind 127.0.0.1 ::1   
+
+Afterwards, restart redis with:         
+
+        sudo systemctl restart redis   
+
+You could find this information also in our community tutorial at:  https://www.digitalocean.com/community/tutorials/how-to-install-and-secure-redis-on-ubuntu-20-04   
+
+We also recommend that you implement a firewall rule preventing access to only hosts that require access to this service via rules on the Droplet itself or via our Cloud Firewall product, which is available at no cost. You can find out more about our firewall option at https://www.digitalocean.com/docs/networking/firewalls/   
+
+We are not aware of any actual abuse or security breach. We send this notification so you can take steps to secure your services and data.   
+
+We also recognize that your configuration may have this port open intentionally and that you’ve taken steps to secure your service, and that these notices may not be helpful to you. Please respond to this ticket and we’ll be happy to add you to our whitelist for these notifications.
+
+Important Note: If you are using Docker containers, be aware that Docker can bypass UFW (Uncomplicated Firewall) rules by default. Docker modifies iptables directly, which may lead to unintended exposure of services. Consider configuring Docker to respect your firewall settings or utilize the DigitalOcean Cloud Firewall feature to prevent unintended network connections. 
+
+Regards,   
+
+Security Operations
+DigitalOcean Security   
+
+ABOUT THE SCAN
+DigitalOcean receives results from  network security scans that are conducted by the Shadowserver Foundation (https://www.shadowserver.org/who-we-are/), a 3rd party security agency that scans the entire IPv4 Internet. DigitalOcean Security matches the results from Shadowserver to the IP addresses associated with your account and provides you this notice in accordance with our Terms of Service which you can review at https://www.digitalocean.com/legal/terms-of-service-agreement/.   
+
+Shadowserver does not attempt to validate authentication. If you run a publicly accessible service, you will still receive this notice, even if the service is secured by a password.
+
+ref:!00Df2018t5m.!500QP01QfSH0:ref
+...
+
+[Message clipped]  Entire message not available offline
