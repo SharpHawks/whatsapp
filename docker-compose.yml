@@ -24,8 +24,7 @@ services:
   redis:
     image: redis:7-alpine
     container_name: whatsapp-redis
-    ports:
-      - "6379:6379"
+    # Port intentionally NOT exposed externally — only accessible within docker network
     volumes:
       - redis-data:/data
     command: >
