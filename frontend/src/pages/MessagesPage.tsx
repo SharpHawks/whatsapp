@@ -217,11 +217,14 @@ export default function MessagesPage() {
                       {message.type}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {message.cost != null && message.cost > 0 ? (
-                        <span className="text-amber-700">€{message.cost.toFixed(2)}</span>
-                      ) : (
-                        <span className="text-green-600 font-medium">Subscription</span>
-                      )}
+                      {(() => {
+                        const cost = Number(message.cost)
+                        return !isNaN(cost) && cost > 0 ? (
+                          <span className="text-amber-700">€{cost.toFixed(2)}</span>
+                        ) : (
+                          <span className="text-green-600 font-medium">Subscription</span>
+                        )
+                      })()}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <Badge variant={getStatusVariant(message.status)}>

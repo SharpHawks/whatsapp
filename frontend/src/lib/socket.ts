@@ -94,13 +94,16 @@ class SocketClient {
 
     this.socket.on('balance:updated', (data: { userId: string; balance: number; change: number }) => {
       window.dispatchEvent(new CustomEvent('balance:updated', { detail: data }))
-      
+
       // Show notification for balance changes
       if (data.change < 0) {
-        toast(`Balance: €${data.balance.toFixed(2)}`, {
-          icon: '💰',
-          duration: 2000,
-        })
+        const balance = Number(data.balance)
+        if (!isNaN(balance)) {
+          toast(`Balance: €${balance.toFixed(2)}`, {
+            icon: '💰',
+            duration: 2000,
+          })
+        }
       }
     })
 
@@ -109,9 +112,16 @@ class SocketClient {
     })
 
     this.socket.on('balance:low', (data: { balance: number; threshold: number }) => {
-      toast.error(`Low balance warning: €${data.balance.toFixed(2)}. Please add funds.`, {
-        duration: 6000,
-      })
+      const balance = Number(data.balance)
+      if (!isNaN(balance)) {
+        toast.error(`Low balance warning: €${balance.toFixed(2)}. Please add funds.`, {
+          duration: 6000,
+        })
+      } else {
+        toast.error('Low balance warning: Please add funds.', {
+          duration: 6000,
+        })
+      }
       window.dispatchEvent(new CustomEvent('balance:low', { detail: data }))
     })
 
@@ -125,8 +135,9 @@ class SocketClient {
       currentBots: number
     }) => {
       window.dispatchEvent(new CustomEvent('quota:updated', { detail: data }))
-      if (data.cost > 0) {
-        toast(`Message sent — €${data.cost.toFixed(2)} (pay-per-message)`, {
+      const cost = Number(data.cost)
+      if (!isNaN(cost) && cost > 0) {
+        toast(`Message sent — €${cost.toFixed(2)} (pay-per-message)`, {
           icon: '💰',
           duration: 3000,
         })
