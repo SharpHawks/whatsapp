@@ -31,13 +31,11 @@ export default function MessagesPage() {
   // Listen for real-time message updates
   useEffect(() => {
     const handleNewMessage = () => {
-      // Invalidate messages query to refetch
       queryClient.invalidateQueries({ queryKey: ['messages'] })
     }
 
     const handleMessageStatus = (event: CustomEvent) => {
       const { messageId, status } = event.detail
-      // Update message status in cache
       queryClient.setQueryData(['messages', { selectedBot, selectedStatus, searchQuery, page }], (oldData: any) => {
         if (!oldData) return oldData
         return {
@@ -49,12 +47,19 @@ export default function MessagesPage() {
       })
     }
 
+    const handleQuotaUpdate = () => {
+      queryClient.invalidateQueries({ queryKey: ['current-subscription'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] })
+    }
+
     window.addEventListener('message:new' as any, handleNewMessage)
     window.addEventListener('message:status' as any, handleMessageStatus)
-    
+    window.addEventListener('quota:updated' as any, handleQuotaUpdate)
+
     return () => {
       window.removeEventListener('message:new' as any, handleNewMessage)
       window.removeEventListener('message:status' as any, handleMessageStatus)
+      window.removeEventListener('quota:updated' as any, handleQuotaUpdate)
     }
   }, [queryClient, selectedBot, selectedStatus, searchQuery, page])
 
@@ -174,6 +179,9 @@ export default function MessagesPage() {
                     Type
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Cost
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Status
                   </th>
                 </tr>
@@ -207,6 +215,13 @@ export default function MessagesPage() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 capitalize">
                       {message.type}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {message.cost === 0 ? (
+                        <span className="text-green-600 font-medium">Subscription</span>
+                      ) : (
+                        <span className="text-amber-700">€{message.cost.toFixed(2)}</span>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <Badge variant={getStatusVariant(message.status)}>

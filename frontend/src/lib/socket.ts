@@ -114,6 +114,24 @@ class SocketClient {
       })
       window.dispatchEvent(new CustomEvent('balance:low', { detail: data }))
     })
+
+    this.socket.on('quota:updated', (data: {
+      messagesUsed: number
+      messagesRemaining: number
+      messageQuota: number | null
+      cost: number
+      billingMode: 'subscription' | 'pay-per-message'
+      botLimit: number | null
+      currentBots: number
+    }) => {
+      window.dispatchEvent(new CustomEvent('quota:updated', { detail: data }))
+      if (data.cost > 0) {
+        toast(`Message sent — €${data.cost.toFixed(2)} (pay-per-message)`, {
+          icon: '💰',
+          duration: 3000,
+        })
+      }
+    })
   }
 
     disconnect() {

@@ -203,6 +203,21 @@ class SocketService {
     });
   }
 
+  emitQuotaUpdate(userId: string, data: {
+    messagesUsed: number;
+    messagesRemaining: number;
+    messageQuota: number | null;
+    cost: number;
+    billingMode: 'subscription' | 'pay-per-message';
+    botLimit: number | null;
+    currentBots: number;
+  }): void {
+    this.emitToUser(userId, 'quota:updated', {
+      ...data,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
   emitApiKeyGenerated(userId: string, botId: string, apiKey: string): void {
     this.emitToUser(userId, 'bot:apikey:generated', {
       botId,

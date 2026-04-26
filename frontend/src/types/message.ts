@@ -10,6 +10,7 @@ export interface Message {
   mediaUrl: string | null
   timestamp: string
   direction: 'incoming' | 'outgoing'
+  cost?: number
 }
 
 export interface MessageFilters {

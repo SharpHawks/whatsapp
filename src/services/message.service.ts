@@ -1,8 +1,9 @@
 import { v4 as uuidv4 } from 'uuid';
 import { db } from '../database';
 import { SendMessageRequest, MessageResponse, Message } from '../types';
-import { billingService } from './billing.service';
 import { queueService } from './queue.service';
+import { billingService } from './billing.service';
+import { subscriptionService } from './subscription.service';
 import { ValidationError, NotFoundError, ErrorCode } from '../utils/errors';
 import { logger } from '../utils/logger';
 import { messagesSentTotal } from '../config/metrics';
@@ -71,17 +72,97 @@ export class MessageService {
     }
 
     // Calculate message cost
-    const cost = billingService.calculateMessageCost(request.type);
+    const baseCost = billingService.calculateMessageCost(request.type);
+    const payPerMessageCost = baseCost * 5; // 5x more expensive without subscription
 
     // Check if user is admin (exempt from charges)
     const adminUser = await isAdminUser(userId);
+    let cost = 0;
 
-    // Only charge non-admin users
     if (!adminUser) {
-      // Check and deduct balance
-      await billingService.deductCost(userId, cost, `Message to ${request.to}`);
+      // Check subscription quota first
+      const quotaResult = await db.query(
+        `SELECT
+           COALESCE(sp.message_quota, 0) as message_quota,
+           COALESCE(us.messages_used, 0) as messages_used,
+           us.status
+         FROM users u
+         LEFT JOIN user_subscriptions us ON us.user_id = u.id AND us.status = 'active'
+         LEFT JOIN subscription_plans sp ON sp.id = us.plan_id
+         WHERE u.id = $1`,
+        [userId]
+      );
+
+      const quotaRow = quotaResult.rows[0];
+      const hasActiveSubscription = quotaRow?.status === 'active';
+      const messageQuota = parseInt(quotaRow?.message_quota || '0', 10);
+      const messagesUsed = parseInt(quotaRow?.messages_used || '0', 10);
+
+      if (hasActiveSubscription && messagesUsed < messageQuota) {
+        // Subscription quota covers this message
+        const updated = await subscriptionService.incrementMessageUsage(userId);
+        if (updated) {
+          logger.info(`User ${userId} sent message via subscription quota: ${messagesUsed + 1}/${messageQuota}`);
+        } else {
+          // Fallback to pay-per-message if increment failed
+          cost = payPerMessageCost;
+          await billingService.deductCost(userId, cost, `[PAY-PER-MESSAGE] ${request.type} to ${request.to}`);
+          logger.info(`User ${userId} sent message via pay-per-message (subscription update failed): €${cost.toFixed(2)}`);
+        }
+      } else {
+        // No active subscription or quota exceeded → pay-per-message
+        cost = payPerMessageCost;
+        await billingService.deductCost(userId, cost, `[PAY-PER-MESSAGE] ${request.type} to ${request.to}`);
+        logger.info(`User ${userId} sent message via pay-per-message: €${cost.toFixed(2)} (base €${baseCost.toFixed(2)} x5)`);
+      }
     } else {
       logger.info(`Admin user ${userId} - message sent free of charge`);
+    }
+
+    // Send real-time quota/cost update to user's socket
+    if (!adminUser) {
+      try {
+        const { socketService } = await import('./socket.service');
+        // Re-fetch fresh quota to emit accurate state
+        const freshResult = await db.query(
+          `SELECT
+             COALESCE(sp.message_quota, 0) as message_quota,
+             COALESCE(us.messages_used, 0) as messages_used,
+             us.status,
+             COALESCE(sp.bot_limit, 1) as bot_limit,
+             (SELECT COUNT(*) FROM bots WHERE user_id = u.id) as current_bots,
+             COALESCE(b.amount, 0) as balance
+           FROM users u
+           LEFT JOIN user_subscriptions us ON us.user_id = u.id AND us.status = 'active'
+           LEFT JOIN subscription_plans sp ON sp.id = us.plan_id
+           LEFT JOIN balances b ON b.user_id = u.id
+           WHERE u.id = $1`,
+          [userId]
+        );
+        const row = freshResult.rows[0];
+        const msgQuota = parseInt(row?.message_quota || '0', 10);
+        const msgUsed = parseInt(row?.messages_used || '0', 10);
+        const balance = parseFloat(row?.balance || '0');
+        const hasSub = row?.status === 'active';
+        const botLimit = parseInt(row?.bot_limit || '1', 10);
+        const currentBots = parseInt(row?.current_bots || '0', 10);
+
+        socketService.emitQuotaUpdate(userId, {
+          messagesUsed: msgUsed,
+          messagesRemaining: Math.max(0, msgQuota - msgUsed),
+          messageQuota: hasSub ? msgQuota : null,
+          cost,
+          billingMode: cost > 0 ? 'pay-per-message' : 'subscription',
+          botLimit: hasSub ? botLimit : null,
+          currentBots,
+        });
+
+        if (cost > 0) {
+          socketService.emitBalanceUpdate(userId, balance, -cost);
+        }
+      } catch (err) {
+        logger.warn('Failed to emit real-time quota update:', err);
+      }
     }
 
     // Create message record

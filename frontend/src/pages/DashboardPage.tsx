@@ -26,14 +26,21 @@ export default function DashboardPage() {
       queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] })
     }
 
+    const handleQuotaUpdate = () => {
+      queryClient.invalidateQueries({ queryKey: ['current-subscription'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] })
+    }
+
     window.addEventListener('message:new' as any, handleUpdate)
     window.addEventListener('balance:updated' as any, handleUpdate)
     window.addEventListener('bot:status' as any, handleUpdate)
+    window.addEventListener('quota:updated' as any, handleQuotaUpdate)
 
     return () => {
       window.removeEventListener('message:new' as any, handleUpdate)
       window.removeEventListener('balance:updated' as any, handleUpdate)
       window.removeEventListener('bot:status' as any, handleUpdate)
+      window.removeEventListener('quota:updated' as any, handleQuotaUpdate)
     }
   }, [queryClient])
 

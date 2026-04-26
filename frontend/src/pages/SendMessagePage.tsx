@@ -1,11 +1,13 @@
 import { useState, useRef } from 'react'
-import { PaperAirplaneIcon, PhotoIcon, DocumentIcon, VideoCameraIcon, MusicalNoteIcon } from '@heroicons/react/24/outline'
+import { PaperAirplaneIcon, PhotoIcon, DocumentIcon, VideoCameraIcon, MusicalNoteIcon, ExclamationTriangleIcon, CheckIcon } from '@heroicons/react/24/outline'
+import { Link } from 'react-router-dom'
 import Button from '../components/common/Button'
 import Card from '../components/common/Card'
 import Input from '../components/common/Input'
 import GroupSelector from '../components/bots/GroupSelector'
 import ApiDocumentation from '../components/bots/ApiDocumentation'
 import { useBots } from '../hooks/useBots'
+import { useCurrentSubscription } from '../hooks/useSubscription'
 import { api } from '../lib/api'
 import toast from 'react-hot-toast'
 
@@ -20,8 +22,58 @@ const messageTypeConfig: Record<MessageType, { label: string; icon: any; accept:
   audio: { label: 'Audio', icon: MusicalNoteIcon, accept: 'audio/*' },
 }
 
+const PAY_PER_MULTIPLIER = 5
+const baseCosts: Record<MessageType, number> = {
+  text: 0.05,
+  image: 0.10,
+  video: 0.20,
+  document: 0.10,
+  audio: 0.10,
+}
+
+function CostIndicator({
+  messageType,
+  plan,
+  subscription,
+  usage,
+}: {
+  messageType: MessageType
+  plan?: { slug: string; name: string; messageQuota: number | null }
+  subscription?: { status: string }
+  usage?: { messagesUsed: number; messagesRemaining: number }
+}) {
+  const baseCost = baseCosts[messageType]
+  const payPerMessageCost = baseCost * PAY_PER_MULTIPLIER
+  const hasActiveSubscription = subscription?.status === 'active'
+  const quotaLeft = (usage?.messagesRemaining ?? 0) > 0
+
+  if (hasActiveSubscription && quotaLeft) {
+    return (
+      <div className="flex items-center gap-2 text-sm text-green-600">
+        <CheckIcon className="h-4 w-4" />
+        <span className="font-medium">Included in your {plan?.name || 'plan'}</span>
+        <span className="text-gray-400">|</span>
+        <span>{usage?.messagesRemaining} messages remaining</span>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex items-center gap-2 text-sm">
+      <ExclamationTriangleIcon className="h-4 w-4 text-amber-500" />
+      <span className="text-amber-700 font-medium">
+        No active subscription — this message costs €{payPerMessageCost.toFixed(2)} ({PAY_PER_MULTIPLIER}x more)
+      </span>
+      <Link to="/plans" className="text-primary-600 font-medium hover:underline ml-1">
+        Subscribe to save
+      </Link>
+    </div>
+  )
+}
+
 export default function SendMessagePage() {
   const { data: bots = [] } = useBots()
+  const { data: subInfo } = useCurrentSubscription()
   const [activeTab, setActiveTab] = useState<TabType>('contact')
   const [selectedBot, setSelectedBot] = useState<string>('')
   const [recipient, setRecipient] = useState<string>('')
@@ -330,7 +382,13 @@ export default function SendMessagePage() {
             )}
 
             {/* Send Button */}
-            <div className="flex justify-end">
+            <div className="flex flex-col items-end gap-2">
+              <CostIndicator
+                messageType={messageType}
+                plan={subInfo?.plan}
+                subscription={subInfo?.subscription}
+                usage={subInfo?.usage}
+              />
               <Button
                 type="submit"
                 variant="primary"
