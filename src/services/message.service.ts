@@ -80,40 +80,23 @@ export class MessageService {
     let cost = 0;
 
     if (!adminUser) {
-      // Check subscription quota first
-      const quotaResult = await db.query(
-        `SELECT
-           COALESCE(sp.message_quota, 0) as message_quota,
-           COALESCE(us.messages_used, 0) as messages_used,
-           us.status
-         FROM users u
-         LEFT JOIN user_subscriptions us ON us.user_id = u.id AND us.status = 'active'
-         LEFT JOIN subscription_plans sp ON sp.id = us.plan_id
-         WHERE u.id = $1`,
+      // Billing check was already handled by checkMessageQuota middleware.
+      // We only need to determine the effective cost for the DB record.
+      // Re-check which mode was used to know the cost to store.
+      const subCheckResult = await db.query(
+        `SELECT us.status
+         FROM user_subscriptions us
+         WHERE us.user_id = $1 AND us.status = 'active'`,
         [userId]
       );
+      const hasActiveSubscription = subCheckResult.rows.length > 0;
 
-      const quotaRow = quotaResult.rows[0];
-      const hasActiveSubscription = quotaRow?.status === 'active';
-      const messageQuota = parseInt(quotaRow?.message_quota || '0', 10);
-      const messagesUsed = parseInt(quotaRow?.messages_used || '0', 10);
-
-      if (hasActiveSubscription && messagesUsed < messageQuota) {
-        // Subscription quota covers this message
-        const updated = await subscriptionService.incrementMessageUsage(userId);
-        if (updated) {
-          logger.info(`User ${userId} sent message via subscription quota: ${messagesUsed + 1}/${messageQuota}`);
-        } else {
-          // Fallback to pay-per-message if increment failed
-          cost = payPerMessageCost;
-          await billingService.deductCost(userId, cost, `[PAY-PER-MESSAGE] ${request.type} to ${request.to}`);
-          logger.info(`User ${userId} sent message via pay-per-message (subscription update failed): €${cost.toFixed(2)}`);
-        }
-      } else {
-        // No active subscription or quota exceeded → pay-per-message
+      if (!hasActiveSubscription) {
+        // Pay-per-message: cost was already deducted by middleware
         cost = payPerMessageCost;
-        await billingService.deductCost(userId, cost, `[PAY-PER-MESSAGE] ${request.type} to ${request.to}`);
-        logger.info(`User ${userId} sent message via pay-per-message: €${cost.toFixed(2)} (base €${baseCost.toFixed(2)} x5)`);
+        logger.info(`User ${userId} message cost (pay-per-message): €${cost.toFixed(2)}`);
+      } else {
+        logger.info(`User ${userId} message sent via subscription quota`);
       }
     } else {
       logger.info(`Admin user ${userId} - message sent free of charge`);
@@ -365,7 +348,7 @@ export class MessageService {
               m.from_number as "from", m.to_number as "to",
               m.content->>'text' as content, m.type, m.status,
               m.content->>'mediaUrl' as "mediaUrl",
-              m.timestamp, m.direction
+              m.cost, m.timestamp, m.direction
        FROM messages m
        JOIN bots b ON m.bot_id = b.id
        WHERE ${whereClause}
