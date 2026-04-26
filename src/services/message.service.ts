@@ -3,7 +3,6 @@ import { db } from '../database';
 import { SendMessageRequest, MessageResponse, Message } from '../types';
 import { queueService } from './queue.service';
 import { billingService } from './billing.service';
-import { subscriptionService } from './subscription.service';
 import { ValidationError, NotFoundError, ErrorCode } from '../utils/errors';
 import { logger } from '../utils/logger';
 import { messagesSentTotal } from '../config/metrics';
