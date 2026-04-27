@@ -720,14 +720,15 @@ export class WorkerBaileysManager {
   }
 
   /**
-   * Load all active bots from database that should be connected
+   * Load all active bots from database that should be connected.
+   * Restores ALL active bots — previous graceful shutdown sets status to 'disconnected'
+   * but session files on disk remain valid, so reconnection happens automatically without QR.
    */
   async loadActiveBots(): Promise<Bot[]> {
     try {
       const result = await db.query<Bot>(
-        `SELECT * FROM bots 
-         WHERE is_active = true 
-         AND connection_status = 'connected'
+        `SELECT * FROM bots
+         WHERE is_active = true
          ORDER BY created_at ASC`
       );
 
@@ -1613,33 +1614,18 @@ export class WorkerBaileysManager {
     const shutdownTimeout = 30000; // 30 seconds
     const shutdownStartTime = Date.now();
 
-    // Save all sessions and close connections
+    // Save all sessions without logout — preserve WhatsApp auth state
+    // so bots auto-reconnect after worker restart without QR scan.
     const shutdownPromises = connections.map(async ([botId, connInfo]) => {
       try {
-        logger.info(`Shutting down connection for bot ${botId}`);
+        logger.info(`Preserving session for bot ${botId} during shutdown`);
 
-        // Save connection state to Redis before shutdown
-        await this.saveConnectionState(botId, 'disconnected');
-
-        // Save session state
+        // Save session state to filesystem (Baileys auth state stays valid)
         await this.saveSession(botId, connInfo.socket);
 
-        // Close socket gracefully with timeout
-        try {
-          const logoutPromise = connInfo.socket.logout();
-          const timeoutPromise = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Logout timeout')), 5000)
-          );
-          
-          await Promise.race([logoutPromise, timeoutPromise]);
-          logger.info(`Bot ${botId} logged out successfully`);
-        } catch (error) {
-          logger.warn(`Error during logout for bot ${botId}:`, error);
-          // Continue with shutdown even if logout fails
-        }
-
-        // Update status in database
-        await this.updateConnectionStatus(botId, 'disconnected');
+        // NOTE: Do NOT call socket.logout() — that invalidates the session
+        // on WhatsApp servers and forces QR rescan on restart.
+        // The WebSocket will close automatically on process exit.
 
         // Save final health metrics
         const health = this.connectionHealth.get(botId);
@@ -1647,10 +1633,10 @@ export class WorkerBaileysManager {
           await redisStorage.storeConnectionHealth(botId, health);
         }
 
-        logger.info(`Connection shut down for bot ${botId}`);
+        logger.info(`Session preserved for bot ${botId}`);
         return { botId, success: true };
       } catch (error) {
-        logger.error(`Error shutting down connection for bot ${botId}:`, error);
+        logger.error(`Error preserving session for bot ${botId}:`, error);
         return { botId, success: false, error };
       }
     });
