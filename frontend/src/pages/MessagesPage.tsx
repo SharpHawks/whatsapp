@@ -1,32 +1,56 @@
 import { useState, useEffect } from 'react'
-import { MagnifyingGlassIcon, FunnelIcon } from '@heroicons/react/24/outline'
+import { MagnifyingGlassIcon, ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/outline'
 import { useQueryClient } from '@tanstack/react-query'
 import Badge from '../components/common/Badge'
 import EmptyState from '../components/common/EmptyState'
 import Spinner from '../components/common/Spinner'
-import { formatDateTime, truncate, getStatusColor } from '../lib/utils'
+import { formatDateTime, truncate, formatCurrency } from '../lib/utils'
 import { useMessages } from '../hooks/useMessages'
 import { useBots } from '../hooks/useBots'
 import type { Message } from '../types/message'
 
 export default function MessagesPage() {
   const [searchQuery, setSearchQuery] = useState('')
-  const [selectedMessage, setSelectedMessage] = useState<Message | null>(null)
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null)
   const [selectedBot, setSelectedBot] = useState<string>('all')
   const [selectedStatus, setSelectedStatus] = useState<string>('all')
   const [page, setPage] = useState(1)
-  
+  const [limit] = useState(20)
+
   const { data: botsData = [] } = useBots()
   const { data: messagesData, isLoading, error } = useMessages({
     botId: selectedBot !== 'all' ? selectedBot : undefined,
     status: selectedStatus !== 'all' ? selectedStatus : undefined,
-    search: searchQuery || undefined,
+    search: debouncedSearch || undefined,
     page,
-    limit: 20,
+    limit,
   })
-  
-  const messages = messagesData?.messages || []
+
+  const messages: Message[] = messagesData?.messages || []
+  const total = messagesData?.total || 0
+  const currentPage = messagesData?.page || page
+  const currentLimit = messagesData?.limit || limit
+  const totalPages = Math.max(1, Math.ceil(total / currentLimit))
+  const hasNext = currentPage < totalPages
+  const hasPrev = currentPage > 1
+  const startItem = total === 0 ? 0 : (currentPage - 1) * currentLimit + 1
+  const endItem = Math.min(currentPage * currentLimit, total)
+
+  const selectedMessage = messages.find((m) => m.id === selectedMessageId) || null
+
   const queryClient = useQueryClient()
+
+  // Debounce search input
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(searchQuery), 400)
+    return () => clearTimeout(timer)
+  }, [searchQuery])
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setPage(1)
+  }, [selectedBot, selectedStatus, debouncedSearch])
 
   // Listen for real-time message updates
   useEffect(() => {
@@ -34,17 +58,9 @@ export default function MessagesPage() {
       queryClient.invalidateQueries({ queryKey: ['messages'] })
     }
 
-    const handleMessageStatus = (event: CustomEvent) => {
-      const { messageId, status } = event.detail
-      queryClient.setQueryData(['messages', { selectedBot, selectedStatus, searchQuery, page }], (oldData: any) => {
-        if (!oldData) return oldData
-        return {
-          ...oldData,
-          messages: oldData.messages.map((msg: Message) =>
-            msg.id === messageId ? { ...msg, status } : msg
-          )
-        }
-      })
+    const handleMessageStatus = () => {
+      // Prefer invalidation over fragile manual cache key matching
+      queryClient.invalidateQueries({ queryKey: ['messages'] })
     }
 
     const handleQuotaUpdate = () => {
@@ -61,7 +77,7 @@ export default function MessagesPage() {
       window.removeEventListener('message:status' as any, handleMessageStatus)
       window.removeEventListener('quota:updated' as any, handleQuotaUpdate)
     }
-  }, [queryClient, selectedBot, selectedStatus, searchQuery, page])
+  }, [queryClient])
 
   const getStatusVariant = (status: Message['status']) => {
     switch (status) {
@@ -94,16 +110,6 @@ export default function MessagesPage() {
     }
   }
 
-  const filteredMessages = messages.filter((message) => {
-    if (!searchQuery) return true
-    const query = searchQuery.toLowerCase()
-    return (
-      (message.content && message.content.toLowerCase().includes(query)) ||
-      (message.from && message.from.includes(query)) ||
-      (message.to && message.to.includes(query))
-    )
-  })
-
   return (
     <div className="page-shell">
       <div className="page-header sm:flex sm:items-center sm:justify-between">
@@ -119,7 +125,7 @@ export default function MessagesPage() {
       </div>
 
       {/* Search and Filters */}
-      <div className="flex flex-col gap-4 sm:flex-row">
+      <div className="flex flex-col gap-4 lg:flex-row">
         <div className="flex-1 relative">
           <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
             <MagnifyingGlassIcon className="h-5 w-5 text-gray-400" />
@@ -132,10 +138,32 @@ export default function MessagesPage() {
             className="input pl-10"
           />
         </div>
-        <button className="btn-secondary">
-          <FunnelIcon className="h-5 w-5 mr-2" />
-          Filters
-        </button>
+        <div className="flex gap-3">
+          <select
+            value={selectedBot}
+            onChange={(e) => setSelectedBot(e.target.value)}
+            className="input min-w-[10rem]"
+          >
+            <option value="all">All bots</option>
+            {botsData.map((bot) => (
+              <option key={bot.id} value={bot.id}>
+                {bot.name}
+              </option>
+            ))}
+          </select>
+          <select
+            value={selectedStatus}
+            onChange={(e) => setSelectedStatus(e.target.value)}
+            className="input min-w-[10rem]"
+          >
+            <option value="all">All statuses</option>
+            <option value="pending">Pending</option>
+            <option value="sent">Sent</option>
+            <option value="delivered">Delivered</option>
+            <option value="read">Read</option>
+            <option value="failed">Failed</option>
+          </select>
+        </div>
       </div>
 
       {/* Messages Table */}
@@ -147,13 +175,13 @@ export default function MessagesPage() {
         <div className="text-center py-12">
           <p className="text-red-600">Failed to load messages. Please try again.</p>
         </div>
-      ) : filteredMessages.length === 0 ? (
+      ) : messages.length === 0 ? (
         <EmptyState
           icon={<MagnifyingGlassIcon className="h-12 w-12" />}
-          title={searchQuery ? 'No messages found' : 'No messages yet'}
+          title={debouncedSearch || selectedBot !== 'all' || selectedStatus !== 'all' ? 'No messages found' : 'No messages yet'}
           description={
-            searchQuery
-              ? 'Try adjusting your search query'
+            debouncedSearch || selectedBot !== 'all' || selectedStatus !== 'all'
+              ? 'Try adjusting your filters or search query'
               : 'Messages will appear here once your bots start receiving them'
           }
         />
@@ -163,34 +191,20 @@ export default function MessagesPage() {
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Time
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Bot
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    From / To
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Message
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Type
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Cost
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Status
-                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Time</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Bot</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">From / To</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Message</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cost</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {filteredMessages.map((message) => (
+                {messages.map((message) => (
                   <tr
                     key={message.id}
-                    onClick={() => setSelectedMessage(message)}
+                    onClick={() => setSelectedMessageId(message.id)}
                     className="hover:bg-gray-50 cursor-pointer transition-colors"
                   >
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -213,23 +227,17 @@ export default function MessagesPage() {
                         <span className="truncate">{truncate(message.content || '', 50)}</span>
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 capitalize">
-                      {message.type}
-                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 capitalize">{message.type}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {(() => {
                         const cost = Number(message.cost)
-                        return !isNaN(cost) && cost > 0 ? (
-                          <span className="text-amber-700">€{cost.toFixed(2)}</span>
-                        ) : (
-                          <span className="text-green-600 font-medium">Subscription</span>
-                        )
+                        return !isNaN(cost) && cost > 0
+                          ? <span className="text-amber-700">{formatCurrency(cost)}</span>
+                          : <span className="text-green-600 font-medium">Subscription</span>
                       })()}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <Badge variant={getStatusVariant(message.status)}>
-                        {message.status}
-                      </Badge>
+                      <Badge variant={getStatusVariant(message.status)}>{message.status}</Badge>
                     </td>
                   </tr>
                 ))}
@@ -240,21 +248,50 @@ export default function MessagesPage() {
           {/* Pagination */}
           <div className="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6">
             <div className="flex-1 flex justify-between sm:hidden">
-              <button className="btn-secondary">Previous</button>
-              <button className="btn-secondary">Next</button>
+              <button
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={!hasPrev}
+                className="btn-secondary disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Previous
+              </button>
+              <button
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={!hasNext}
+                className="btn-secondary disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Next
+              </button>
             </div>
             <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
               <div>
                 <p className="text-sm text-gray-700">
-                  Showing <span className="font-medium">1</span> to{' '}
-                  <span className="font-medium">{filteredMessages.length}</span> of{' '}
-                  <span className="font-medium">{messages.length}</span> results
+                  Showing <span className="font-medium">{startItem}</span> to{' '}
+                  <span className="font-medium">{endItem}</span> of{' '}
+                  <span className="font-medium">{total}</span> results
                 </p>
               </div>
               <div>
                 <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px">
-                  <button className="btn-secondary rounded-l-md">Previous</button>
-                  <button className="btn-secondary rounded-r-md">Next</button>
+                  <button
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    disabled={!hasPrev}
+                    className="btn-secondary rounded-l-md disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center"
+                  >
+                    <ChevronLeftIcon className="h-4 w-4 mr-1" />
+                    Previous
+                  </button>
+                  <span className="inline-flex items-center px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300">
+                    Page {currentPage} of {totalPages}
+                  </span>
+                  <button
+                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={!hasNext}
+                    className="btn-secondary rounded-r-md disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center"
+                  >
+                    Next
+                    <ChevronRightIcon className="h-4 w-4 ml-1" />
+                  </button>
                 </nav>
               </div>
             </div>
@@ -266,7 +303,7 @@ export default function MessagesPage() {
       {selectedMessage && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50"
-          onClick={() => setSelectedMessage(null)}
+          onClick={() => setSelectedMessageId(null)}
         >
           <div
             className="bg-white rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto"
@@ -275,7 +312,7 @@ export default function MessagesPage() {
             <div className="flex items-start justify-between mb-4">
               <h2 className="text-xl font-bold text-gray-900">Message Details</h2>
               <button
-                onClick={() => setSelectedMessage(null)}
+                onClick={() => setSelectedMessageId(null)}
                 className="text-gray-400 hover:text-gray-600"
               >
                 ✕
@@ -301,9 +338,7 @@ export default function MessagesPage() {
 
               <div>
                 <label className="text-sm font-medium text-gray-500">Time</label>
-                <p className="mt-1 text-sm text-gray-900">
-                  {formatDateTime(selectedMessage.timestamp)}
-                </p>
+                <p className="mt-1 text-sm text-gray-900">{formatDateTime(selectedMessage.timestamp)}</p>
               </div>
 
               <div>
@@ -316,9 +351,7 @@ export default function MessagesPage() {
               <div>
                 <label className="text-sm font-medium text-gray-500">Status</label>
                 <div className="mt-1">
-                  <Badge variant={getStatusVariant(selectedMessage.status)}>
-                    {selectedMessage.status}
-                  </Badge>
+                  <Badge variant={getStatusVariant(selectedMessage.status)}>{selectedMessage.status}</Badge>
                 </div>
               </div>
 
@@ -346,7 +379,7 @@ export default function MessagesPage() {
 
             <div className="mt-6">
               <button
-                onClick={() => setSelectedMessage(null)}
+                onClick={() => setSelectedMessageId(null)}
                 className="btn-secondary w-full"
               >
                 Close

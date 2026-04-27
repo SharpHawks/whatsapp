@@ -100,16 +100,20 @@ router.get('/:messageId', authenticateApiKey, async (req: AuthRequest, res: Resp
 // Get all messages for user (JWT authentication) - for frontend dashboard
 router.get('/', authenticateJWT, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const { botId, status, type, search, page = '1', limit = '20' } = req.query;
+    const rawPage = req.query.page ? parseInt(req.query.page as string, 10) : 1;
+    const rawLimit = req.query.limit ? parseInt(req.query.limit as string, 10) : 20;
+    const page = Number.isFinite(rawPage) && rawPage >= 1 ? rawPage : 1;
+    const limit = Number.isFinite(rawLimit) && rawLimit >= 1 && rawLimit <= 100 ? rawLimit : 20;
 
-    // Get all user's messages across all bots
+    const { botId, status, type, search } = req.query;
+
     const result = await messageService.getUserMessages(req.userId!, {
       botId: botId as string | undefined,
       status: status as string | undefined,
       type: type as string | undefined,
       search: search as string | undefined,
-      page: parseInt(page as string, 10),
-      limit: parseInt(limit as string, 10),
+      page,
+      limit,
     });
 
     res.json(result);

@@ -320,7 +320,7 @@ export class MessageService {
     }
 
     if (filters?.search) {
-      conditions.push(`(m.from_number LIKE $${paramIndex} OR m.to_number LIKE $${paramIndex} OR m.content::text LIKE $${paramIndex})`);
+      conditions.push(`(m.from_number ILIKE $${paramIndex} OR m.to_number ILIKE $${paramIndex} OR m.content::text ILIKE $${paramIndex})`);
       values.push(`%${filters.search}%`);
       paramIndex++;
     }
